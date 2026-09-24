@@ -1,4 +1,4 @@
-# SHA-256 SystemVerilog Core
+# nano_hash: A SHA-256 hashing algorithm hardware accelerator
 
 A synthesizable SystemVerilog implementation of SHA-256 with AXI4-Stream-style message ingress and digest egress. The design accepts a message as 32-bit stream beats, performs FIPS 180-4 message padding and SHA-256 compression, and emits the 256-bit digest as eight 32-bit stream beats.
 
