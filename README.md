@@ -1,4 +1,4 @@
-# nano_hash: A SHA-256 hashing algorithm hardware accelerator
+# nano_hash: A SHA-256 cryptographic hash function hardware accelerator
 
 A synthesizable SystemVerilog implementation of SHA-256 with AXI4-Stream-style message ingress and digest egress. The design accepts a message as 32-bit stream beats, performs FIPS 180-4 message padding and SHA-256 compression, and emits the 256-bit digest as eight 32-bit stream beats.
 
@@ -268,11 +268,27 @@ This ordering is visible in the top-level testbench's byte packing and in the sc
 
 ## Design Notes and Limitations
 
-- The public module is named `sha_top`, not `sha_256_top`.
-- The AXI signals are AXI4-Stream-style interfaces; no AXI interconnect, register interface, or burst control is included.
-- The input path has a 32-bit data width and the output path emits one 32-bit digest word per transfer.
-- The implementation is iterative rather than fully unrolled or deeply pipelined. A block requires the scheduler load plus the 64 compression rounds and digest update.
-- No hardware synthesis constraints, timing constraints, resource utilization reports, formal properties, or vendor-specific wrappers are included.
+### Module Naming and Hierarchy
+* **Top-Level Entity:** The primary synthesizable top-level module is named `sha_top` (not `sha_256_top` or `sha256_top`). All top-level instantiations and testbench bindings must target `sha_top`.
+
+### Interface Semantics
+* **Streaming Protocol:** The interface implements an AMBA AXI4-Stream-style point-to-point protocol (`s_axis_*` for payload ingress, `m_axis_*` for digest egress).
+* **Omission of Bus Infrastructure:** The core does not include an AXI memory-mapped crossbar/interconnect, register interface (Control and Status Registers / CSRs), address decoding, or burst-control logic.
+* **System Integration:** Memory access, scatter-gather buffer descriptors, and packet framing must be handled externally by upstream/downstream DMA engines, streaming FIFOs, or custom bus adapters.
+
+### Datapath Sizing and Throughput
+* **Bus Widths:** Ingress data (`s_axis_tdata`) and egress digest data (`m_axis_tdata`) are both fixed to a 32-bit width.
+* **Digest Serialization:** The 256-bit output hash is serialized across the egress interface, transmitting one 32-bit word per handshake beat. Draining the complete digest requires 8 valid transfer cycles ($H_0 \dots H_7$).
+
+### Microarchitectural Trade-offs
+* **Iterative Architecture:** The design implements a folded, iterative round computation rather than a fully unrolled (cascaded 64-stage) or deeply pipelined execution pipeline.
+* **Block Latency:** Computing each 512-bit message block requires the message schedule load phase, 64 iterative compression rounds, and a state accumulation cycle (~66 clock cycles per block).
+* **Area vs. Throughput:** This iterative approach significantly minimizes FPGA LUT and flip-flop consumption at the expense of multi-block streaming throughput.
+
+### Implementation and Verification Scope
+* **Vendor-Agnostic RTL:** The codebase consists of pure, standard SystemVerilog without vendor-specific macro instantiations or target-locked IP wrappers.
+* **Constraints and Reports:** Hardware synthesis constraints (XDC/SDC), static timing closure constraints, post-implementation utilization reports, and formal property suites (SVA/bind files) are not bundled with this repository.
+* **IP Packaging:** Vendor-specific packaging metadata (such as Vivado IP-XACT `component.xml` or Intel Platform Designer components) is excluded and must be generated during target system integration.
 
 ## References
 
