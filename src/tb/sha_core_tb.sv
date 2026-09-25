@@ -7,7 +7,7 @@ module sha_core_tb;
     logic [255:0] digest;
     logic digest_valid;
     logic done;
-    logic sha_valid;   // FIX: core now starts on sha_valid & scheduler_ready
+    logic sha_valid; 
     logic scheduler_ready;
     logic [31:0] block_0 [0:15];
     logic [31:0] block_1 [0:15];
@@ -76,8 +76,8 @@ module sha_core_tb;
         for(int i = 0; i < 16; i++)
             current_w_buffer[i] = r_block[i];
 
-        cb.done <= 1'b1;        // single-block message: this block is the last one
-        cb.sha_valid <= 1'b1;   // one-cycle "block ready" pulse
+        cb.done <= 1'b1;        // single-block message
+        cb.sha_valid <= 1'b1;   // one-cycle block ready pulse
         @(cb);
         cb.sha_valid <= 1'b0;
 
@@ -115,7 +115,7 @@ module sha_core_tb;
             current_w_buffer[i] = blk_a[i];
 
         cb.done <= 1'b0;        // not the last block
-        cb.sha_valid <= 1'b1;   // one-cycle "block ready" pulse
+        cb.sha_valid <= 1'b1;   // one-cycle block ready pulse
         @(cb);
         cb.sha_valid <= 1'b0;
 
@@ -124,7 +124,7 @@ module sha_core_tb;
             @(cb);
         end while (digest_valid !== 1'b1);
  
-        // swap in the second (final) block and hand it to the core
+        // swap in the second block and hand it to the core
         for(int i = 0; i < 16; i++)
             current_w_buffer[i] = blk_b[i];
         cb.done <= 1'b1;
