@@ -1,5 +1,3 @@
-// =============================================================================
-//
 module basys3_sha256_uart_top (
     input  logic       clk,
     input  logic       btnC,
@@ -401,7 +399,7 @@ module basys3_sha256_uart_top (
     end
 
     // -------------------------------------------------------------------
-    // Status LEDs (optional, purely cosmetic)
+    // Status LEDs
     // -------------------------------------------------------------------
     assign led[0] = (current_state != S_WAIT_INPUT) && (current_state != S_PRINT_PROMPT);
     assign led[1] = (current_state == S_STREAM_WORD) || (current_state == S_WAIT_DIGEST);
