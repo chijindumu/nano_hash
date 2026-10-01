@@ -40,12 +40,21 @@ module basys3_sha256_uart_top (
         .data_in    (tx_data)
     );
 
-    
+    // -------------------------------------------------------------------
+    // TX byte-sender: uart_tx exposes no "busy"/"idle" port, only
+    // tx_trigger (in) and tx_done (out, high only during the stop bit).
+    // tx_trigger is sampled by uart_tx only while it is idle AND a
+    // baud_tick happens to land in that same cycle, so a request must be
+    // held long enough to guarantee at least one baud_tick occurs
+    // (baud_tick repeats every 326 clk cycles here) before being dropped.
+    // "busy" is tracked locally and cleared on the falling edge of
+    // tx_done, which marks the return to the idle state.
+    // -------------------------------------------------------------------
     localparam int HOLD_CYCLES = 700; // > 2 * 326, safely spans a baud_tick
 
-    logic        tx_req;      // pulse: request to send tx_byte_in
+    logic        tx_req;      
     logic [7:0]  tx_byte_in;
-    logic        tx_ready;    // 1 = transmitter idle, safe to request
+    logic        tx_ready;    
 
     logic        tx_hold;
     logic [9:0]  tx_hold_cnt;
@@ -307,6 +316,12 @@ module basys3_sha256_uart_top (
                 print_idx == PROMPT_LEN - 1) begin
                 byte_count <= '0;
             end
+
+            // Every print sequence (echo-BS, newline, label, hex, prompt) must
+            // start at index 0. Clearing on any state change fixes the case
+            // where print_idx carried over (e.g. label ended at 11, so the hex
+            // string started at character 11). Placed last so it wins over the
+            // increment above on the cycle a sequence finishes.
             if (next_state != current_state) begin
                 print_idx <= 7'd0;
             end
@@ -398,7 +413,7 @@ module basys3_sha256_uart_top (
     end
 
     // -------------------------------------------------------------------
-    // Status LEDs (optional, purely cosmetic)
+    // Status LEDs
     // -------------------------------------------------------------------
     assign led[0] = (current_state != S_WAIT_INPUT) && (current_state != S_PRINT_PROMPT);
     assign led[1] = (current_state == S_STREAM_WORD) || (current_state == S_WAIT_DIGEST);
