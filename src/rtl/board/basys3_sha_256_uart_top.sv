@@ -1,27 +1,3 @@
-// =============================================================================
-// basys3_sha256_uart_top.sv
-//
-// Basys3 top level: lets you type a message into TeraTerm, press Enter, and
-// get the SHA-256 hash of that message printed back as 64 hex characters.
-//
-// Wraps:
-//   - sha_top          (sha_256_top.sv)   : AXI4-Stream SHA-256 core
-//   - uart_rx           (uart_rx.v)        : 8N1 UART receiver, 16x oversample
-//   - uart_tx           (uart_tx.v)        : 8N1 UART transmitter
-// uart_rx/uart_tx each instantiate their own `baudgen` (baudrate_gen.v)
-// internally with the default samplingrate=326 -> 19200 baud @ 100 MHz clk.
-// Set TeraTerm to 19200 baud, 8 data bits, no parity, 1 stop bit, no flow
-// control, and turn OFF local echo (this design echoes typed characters
-// itself so you can see what you're typing and use Backspace to correct it).
-//
-// Pins (Basys3 rev B/C/D/E, Digilent master XDC names):
-//   clk  -> W5   (100 MHz onboard oscillator)
-//   btnC -> U18  (center pushbutton, active-high system reset)
-//   RsRx -> B18  (USB-UART bridge TX -> FPGA RX)
-//   RsTx -> A18  (FPGA TX -> USB-UART bridge RX)
-//   led[2:0] -> U16, E19, U19 (status only, optional)
-// =============================================================================
-
 module basys3_sha256_uart_top (
     input  logic       clk,
     input  logic       btnC,
@@ -32,10 +8,6 @@ module basys3_sha256_uart_top (
     timeunit 1ns;
     timeprecision 1ps;
 
-    // -------------------------------------------------------------------
-    // Reset synchronizer: btnC is an async, active-high pushbutton.
-    // sha_top/uart_rx/uart_tx all want a synchronous, ACTIVE-LOW reset.
-    // -------------------------------------------------------------------
     logic [1:0] rst_sync;
     logic       rst_n;
 
@@ -44,10 +16,6 @@ module basys3_sha256_uart_top (
     end
     assign rst_n = ~rst_sync[1];
 
-    // -------------------------------------------------------------------
-    // UART instances (baud rate fixed by their internal baudgen default:
-    // 100 MHz / (19200*16) = 326 -> 19200 baud)
-    // -------------------------------------------------------------------
     logic [7:0] rx_data;
     logic       rx_done;
 
@@ -72,16 +40,7 @@ module basys3_sha256_uart_top (
         .data_in    (tx_data)
     );
 
-    // -------------------------------------------------------------------
-    // TX byte-sender: uart_tx exposes no "busy"/"idle" port, only
-    // tx_trigger (in) and tx_done (out, high only during the stop bit).
-    // tx_trigger is sampled by uart_tx only while it is idle AND a
-    // baud_tick happens to land in that same cycle, so a request must be
-    // held long enough to guarantee at least one baud_tick occurs
-    // (baud_tick repeats every 326 clk cycles here) before being dropped.
-    // "busy" is tracked locally and cleared on the falling edge of
-    // tx_done, which marks the return to the idle state.
-    // -------------------------------------------------------------------
+    
     localparam int HOLD_CYCLES = 700; // > 2 * 326, safely spans a baud_tick
 
     logic        tx_req;      // pulse: request to send tx_byte_in
@@ -161,7 +120,7 @@ module basys3_sha256_uart_top (
     logic [8:0] byte_count; // 0..256
 
     // -------------------------------------------------------------------
-    // Fixed strings / hex conversion helpers
+    // hex conversion helpers
     // -------------------------------------------------------------------
     logic [31:0] digest_words [0:7];
 
@@ -187,7 +146,7 @@ module basys3_sha256_uart_top (
             4'd7: label_char = "5";
             4'd8: label_char = "6";
             4'd9: label_char = ":";
-            default: label_char = " "; // idx == 10
+            default: label_char = " "; 
         endcase
     endfunction
     localparam int LABEL_LEN = 11;
@@ -202,7 +161,6 @@ module basys3_sha256_uart_top (
     localparam int BS_LEN = 3;
 
     function automatic logic [7:0] nibble_to_ascii(input logic [3:0] nib);
-        // 0-9 -> '0'..'9' (48+n); 10-15 -> 'a'..'f' (87+n, since 'a' = 97)
         nibble_to_ascii = (nib < 4'd10) ? (8'd48 + {4'b0, nib})
                                          : (8'd87 + {4'b0, nib});
     endfunction
@@ -257,7 +215,7 @@ module basys3_sha256_uart_top (
         end
     endfunction
 
-    // ---- sequential: state + datapath registers ----
+    // ---- FSMD ----
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             current_state   <= S_PRINT_PROMPT;
@@ -345,26 +303,17 @@ module basys3_sha256_uart_top (
                 default: ;
             endcase
 
-            // byte_count is cleared exactly once, when leaving the prompt
-            // (covers both the very first prompt after reset and every
-            // post-hash prompt), so a fresh message always starts at index 0
             if (current_state == S_PRINT_PROMPT && tx_ready &&
                 print_idx == PROMPT_LEN - 1) begin
                 byte_count <= '0;
             end
-
-            // Every print sequence (echo-BS, newline, label, hex, prompt) must
-            // start at index 0. Clearing on any state change fixes the case
-            // where print_idx carried over (e.g. label ended at 11, so the hex
-            // string started at character 11). Placed last so it wins over the
-            // increment above on the cycle a sequence finishes.
             if (next_state != current_state) begin
                 print_idx <= 7'd0;
             end
         end
     end
 
-    // ---- combinational: next-state logic ----
+    // ---- next-state logic ----
     always_comb begin
         next_state = current_state;
         unique case (current_state)
@@ -388,7 +337,7 @@ module basys3_sha256_uart_top (
         endcase
     end
 
-    // ---- combinational: TX request + outputs ----
+    // ---- TX request + outputs ----
     always_comb begin
         tx_req        = 1'b0;
         tx_byte_in    = 8'h00;
